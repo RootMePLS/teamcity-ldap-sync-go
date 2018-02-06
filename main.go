@@ -4,6 +4,7 @@ import "fmt"
 import (
 	"gopkg.in/ldap.v2"
 	"log"
+	"flag"
 )
 
 type User struct {
@@ -72,14 +73,23 @@ func getUsersAD(groupName, baseDN string, link ldap.Conn) {
 func getUsersTC() {}
 
 func main() {
+
+
+	username := flag.String("username", "username@domain.com", "Domain login for auth")
+	password := flag.String("password", "topSecret", "Password for auth")
+	server := flag.String("server", "domain.com", "Address of LDAP server")
+	port := flag.String("port", "389", "Port of LDAP server")
+
+	flag.Parse()
+
 	// No TLS, not recommended
-	l, err := ldap.Dial("tcp", "")
+	l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%s", *server, *port))
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer l.Close()
 
-	err = l.Bind("dmiroshnichenko@ptsecurity.com", "")
+	err = l.Bind(*username, *password)
 	if err != nil {
 		// error in ldap bind
 		log.Println(err)
@@ -89,10 +99,10 @@ func main() {
 
 	//group := "DevOps"
 	//filter := fmt.Sprintf("(&(objectClass=user)(memberof:1.2.840.113556.1.4.1941:=%s))", "*Zabbix*")
-	filter := fmt.Sprintf("(&(objectClass=user)(objectCategory=Person)(memberOf:1.2.840.113556.1.4.1941:=%s))", group)
+	//filter := fmt.Sprintf("(&(objectClass=user)(objectCategory=Person)(memberOf:1.2.840.113556.1.4.1941:=%s))", group)
 	//filter := fmt.Sprintf("(distinguishedName=%s)", "CN=Vasiliy Zvyagintsev,OU=Users,OU=Tmsk,DC=ptsecurity,DC=ru")
 	//filter := fmt.Sprintf("(sAMAccountName=%s)", dn)
-	//filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", group)
+	filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", group)
 	searchRequest := ldap.NewSearchRequest(
 		"dc=ptsecurity,dc=ru", // The base dn to search
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
