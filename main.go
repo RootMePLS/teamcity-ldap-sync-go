@@ -6,13 +6,26 @@ import (
 	"log"
 	"flag"
 	"net/http"
-	"net"
+	"io/ioutil"
+
+
+	"encoding/json"
 )
 
 type User struct {
 	username string
 	name     string
 	mail     string
+}
+
+type Groups struct {
+	GroupList []Group `json:"group"`
+}
+
+type Group struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	Href string `json:"href"`
 }
 
 func getUsersFromAD(groupName, baseDN string, link ldap.Conn) []User {
@@ -97,12 +110,12 @@ func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
 	return sr.Entries[0].DN
 }
 
-func getTCGroups(groupName string){
+func getTCGroups(url string) Groups {
 
 	client := &http.Client{}
 
-	url := "https://teamcity.ptsecurity.ru/app/rest/userGroups"
-	searcherReq, err := http.NewRequest("GET",url, nil)
+
+	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 
@@ -113,7 +126,14 @@ func getTCGroups(groupName string){
 	}
 	defer resp.Body.Close()
 
-     //   resp = self.session.get(url, verify=False)
+	body, err := ioutil.ReadAll(resp.Body)
+
+	var msg Groups
+	json.Unmarshal(body, &msg)
+
+	fmt.Println(msg, "\n", len(msg.GroupList))
+
+	//   resp = self.session.get(url, verify=False)
 	//resp.raise_for_status()
 	//groups_in_tc = resp.json()
 	//return [group for group in groups_in_tc['group']]
@@ -173,11 +193,12 @@ func main() {
 	//	//fmt.Printf("%s: %v\n", entry.DN, entry.GetAttributeValue("member"))
 	//}
 
-	groups := []string{"R.MPX.ISIM.Repos.All.Reader",}
-	for _, groupName := range groups {
-		groupDN := getGroupDN(groupName, "dc=ptsecurity,dc=ru", *l)
-		users := getUsersFromAD(groupDN, "dc=ptsecurity,dc=ru", *l)
-		fmt.Println(users, "\n" ,len(users))
-	}
+	//groups := []string{"R.MPX.ISIM.Repos.All.Reader",}
+	//for _, groupName := range groups {
+	//	groupDN := getGroupDN(groupName, "dc=ptsecurity,dc=ru", *l)
+	//	users := getUsersFromAD(groupDN, "dc=ptsecurity,dc=ru", *l)
+	//	fmt.Println(users, "\n" ,len(users))
+	//}
+	getTCGroups("R.DevOps.Teamcity.Developers")
 
 }
