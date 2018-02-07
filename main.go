@@ -233,7 +233,7 @@ func (user User) removeUserFromGroup(conn Connection, client http.Client) {
 	//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
 }
 
-func (user User) createUser(conn Connection, client http.Client) {
+func createUser(conn Connection, client http.Client) {
 	//def create_group(self, group_name):
 	//print("Creating group {} in TC".format(group_name))
 	//url = self.rest_url + 'userGroups'
@@ -246,7 +246,7 @@ func (user User) createUser(conn Connection, client http.Client) {
 	//print("Error: Couldn't create group {}\n{}".format(group_name, resp.content))
 }
 
-func (user User) createGroup(conn Connection, client http.Client) {
+func createGroup(conn Connection, client http.Client) {
 	//def create_user(self, user):
 	//print("Creating user {}".format(user['username']))
 	//url = self.rest_url + 'users'
