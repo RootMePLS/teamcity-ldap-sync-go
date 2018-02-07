@@ -8,14 +8,19 @@ import (
 	"net/http"
 	"io/ioutil"
 
-
 	"encoding/json"
 )
 
+type Users struct {
+	UsersList []User `json:"user"`
+}
+
 type User struct {
-	username string
-	name     string
-	mail     string
+	Id       int `json:"id"`
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Href     string `json:"href"`
+	Mail     string
 }
 
 type Groups struct {
@@ -80,9 +85,9 @@ func getUserAttributes(userDN, baseDN string, link ldap.Conn) User {
 
 	fullName := sr.Entries[0].GetAttributeValue("givenName") + " " + sr.Entries[0].GetAttributeValue("sn")
 
-	user.name = fullName
-	user.username = sr.Entries[0].GetAttributeValue("sAMAccountName")
-	user.mail = sr.Entries[0].GetAttributeValue("mail")
+	user.Name = fullName
+	user.Username = sr.Entries[0].GetAttributeValue("sAMAccountName")
+	user.Mail = sr.Entries[0].GetAttributeValue("mail")
 
 	return user
 }
@@ -110,7 +115,7 @@ func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
 	return sr.Entries[0].DN
 }
 
-func getTCGroups(url string) Groups {
+func getTCGroups() {
 
 	client := &http.Client{}
 
@@ -128,12 +133,41 @@ func getTCGroups(url string) Groups {
 
 	body, err := ioutil.ReadAll(resp.Body)
 
-	var msg Groups
-	json.Unmarshal(body, &msg)
+	var groups Groups
+	json.Unmarshal(body, &groups)
 
-	fmt.Println(msg, "\n", len(msg.GroupList))
+	fmt.Println(groups, "\n", len(groups.GroupList))
 
-	//   resp = self.session.get(url, verify=False)
+	//resp = self.session.get(url, verify=False)
+	//resp.raise_for_status()
+	//groups_in_tc = resp.json()
+	//return [group for group in groups_in_tc['group']]
+}
+
+func getTCUsers() {
+
+	client := &http.Client{}
+
+
+	searcherReq, err := http.NewRequest("GET", url, nil)
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+
+	var users Users
+	json.Unmarshal(body, &users)
+
+	fmt.Println(users, "\n", len(users.UsersList))
+
+	//resp = self.session.get(url, verify=False)
 	//resp.raise_for_status()
 	//groups_in_tc = resp.json()
 	//return [group for group in groups_in_tc['group']]
@@ -199,6 +233,7 @@ func main() {
 	//	users := getUsersFromAD(groupDN, "dc=ptsecurity,dc=ru", *l)
 	//	fmt.Println(users, "\n" ,len(users))
 	//}
-	getTCGroups("R.DevOps.Teamcity.Developers")
-
+	//getTCGroups()
+	//
+	getTCUsers()
 }
