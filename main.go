@@ -1,13 +1,12 @@
 package main
 
-import "fmt"
 import (
+	"fmt"
 	"gopkg.in/ldap.v2"
 	"log"
 	"flag"
 	"net/http"
 	"io/ioutil"
-
 	"encoding/json"
 	"strings"
 )
@@ -116,13 +115,13 @@ func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
 	return sr.Entries[0].DN
 }
 
-func getTCGroups(url, username, password string, client http.Client) Groups {
+func getTCGroups(url, login, password string, client http.Client) Groups {
 
 	url = "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(username, password)
+	searcherReq.SetBasicAuth(login, password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -138,13 +137,13 @@ func getTCGroups(url, username, password string, client http.Client) Groups {
 	return groups
 }
 
-func getTCUsers(url, username, password string, client http.Client) Users {
+func getTCUsers(url, login, password string, client http.Client) Users {
 
 	url = url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(username, password)
+	searcherReq.SetBasicAuth(login, password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -158,6 +157,27 @@ func getTCUsers(url, username, password string, client http.Client) Users {
 	json.Unmarshal(body, &users)
 
 	return users
+}
+
+func (u User) getTCUserGroups(url, username, login, password string, client http.Client) Groups {
+	url = url + "/app/rest/users/" + username + "/groups"
+	searcherReq, err := http.NewRequest("GET", url, nil)
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+	searcherReq.SetBasicAuth(login, password)
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+
+	var userGroups Groups
+	json.Unmarshal(body, &userGroups)
+
+	return userGroups
 }
 
 func main() {
@@ -182,48 +202,10 @@ func main() {
 		log.Println(err)
 	}
 
-	////group := "R.MPX.ISIM.Repos.All.Reader"
-	//group := "CN=R.MPX.ISIM.Repos.All.Reader,OU=DevOpsRoles,OU=Groups,OU=Msk,DC=ptsecurity,DC=ru"
-	////group := "DevOps"
-	////filter := fmt.Sprintf("(&(objectClass=user)(memberof:1.2.840.113556.1.4.1941:=%s))", "*Zabbix*")
-	//filter := fmt.Sprintf("(&(objectClass=user)(objectCategory=Person)(memberOf:1.2.840.113556.1.4.1941:=%s))", group)
-	////filter := fmt.Sprintf("(distinguishedName=%s)", "CN=Vasiliy Zvyagintsev,OU=Users,OU=Tmsk,DC=ptsecurity,DC=ru")
-	////filter := fmt.Sprintf("(sAMAccountName=%s)", dn)
-	////filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", group)
-	//searchRequest := ldap.NewSearchRequest(
-	//	"dc=ptsecurity,dc=ru", // The base dn to search
-	//	ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-	//	filter,                        // The filter to apply
-	//	[]string{"dn", "cn", "member", "sn", "givenName", "mail"}, // A list attributes to retrieve
-	//	nil,
-	//)
-	//
-	//sr, err := l.Search(searchRequest)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//for _, entry := range sr.Entries { // [0].Attributes[1].Values {
-	//	//fmt.Println(entry.GetAttributeValues("member"))
-	//	//fmt.Println(entry.GetAttributeValues("mail"))
-	//	//fmt.Println(entry.GetAttributeValues("dn"))
-	//	//fmt.Println(entry.GetAttributeValues("cn"))
-	//	//fmt.Println(entry.GetAttributeValues("sn"))
-	//	fmt.Println(entry.DN)
-	//	//fmt.Println(entry.GetAttributeValues("member")[0])
-	//	//fmt.Println(entry.Attributes[0])
-	//	//fmt.Printf("%s: %v\n", entry.DN, entry.GetAttributeValue("member"))
-	//}
-
-	//groups := []string{"R.MPX.ISIM.Repos.All.Reader",}
-	//for _, groupName := range groups {
-	//	groupDN := getGroupDN(groupName, "dc=ptsecurity,dc=ru", *l)
-	//	users := getUsersFromAD(groupDN, "dc=ptsecurity,dc=ru", *l)
-	//	fmt.Println(users, "\n" ,len(users))
-	//}
-	//getTCGroups()
-	//
 	client := &http.Client{}
 	userList := getTCUsers(*teamcity, tcUsername, *password, *client)
-	fmt.Println(userList)
+	fmt.Println(userList.UsersList[255])
+	fish := userList.UsersList[255]
+	fGroups := fish.getTCUserGroups(*teamcity, fish.Username, tcUsername, *password, *client)
+	fmt.Println(fGroups)
 }
