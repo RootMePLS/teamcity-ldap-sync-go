@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"strings"
+	"bytes"
 )
 
 type Connection struct {
@@ -26,7 +27,7 @@ type User struct {
 	Username string `json:"username"`
 	Name     string `json:"name"`
 	Href     string `json:"href"`
-	Mail     string
+	Mail     string `json:"email"`
 }
 
 type Groups struct {
@@ -34,10 +35,10 @@ type Groups struct {
 }
 
 type Group struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
-	Href string `json:"href"`
-	Users  Users  `json:"users"`
+	Key   string `json:"key"`
+	Name  string `json:"name"`
+	Href  string `json:"href"`
+	Users Users  `json:"users"`
 }
 
 func getUsersLDAP(groupName, baseDN string, link ldap.Conn) []User {
@@ -166,27 +167,6 @@ func getUsersTC(conn Connection, client http.Client) Users {
 	return users
 }
 
-func (user User) getUserGroups(conn Connection, client http.Client) Groups {
-	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
-	searcherReq, err := http.NewRequest("GET", url, nil)
-	searcherReq.Header.Add("Content-type", "application/json")
-	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(conn.login, conn.password)
-
-	resp, err := client.Do(searcherReq)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-
-	var userGroups Groups
-	json.Unmarshal(body, &userGroups)
-
-	return userGroups
-}
-
 func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users {
 
 	url := conn.url + group.Href
@@ -207,6 +187,58 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 	json.Unmarshal(body, &users)
 
 	return users.Users
+}
+
+func createGroup(groupName string, conn Connection, client http.Client) {
+	fmt.Println("Creating group", groupName)
+	//url := conn.url + "/users"
+	url := "http://localhost/app/rest/userGroups"
+
+	//key = ''.join(random.choice('0123456789ABCDEF') for i in range(16))
+	//data = json.dumps({"name": group_name, "key": key})
+
+	data, err := json.Marshal({groupName})
+
+	if err != nil {
+		panic(err)
+	}
+
+	searcherReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+	searcherReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
+	defer resp.Body.Close()
+}
+
+func (user User) getUserGroups(conn Connection, client http.Client) Groups {
+
+	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
+	searcherReq, err := http.NewRequest("GET", url, nil)
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+	searcherReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+
+	var userGroups Groups
+	json.Unmarshal(body, &userGroups)
+
+	return userGroups
 }
 
 func (user User) addUserToGroup(conn Connection, client http.Client) {
@@ -239,32 +271,29 @@ func (user User) removeUserFromGroup(conn Connection, client http.Client) {
 	//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
 }
 
-func createUser(conn Connection, client http.Client) {
-	//def create_group(self, group_name):
-	//print("Creating group {} in TC".format(group_name))
-	//url = self.rest_url + 'userGroups'
-	//   key = ''.join(random.choice('0123456789ABCDEF') for i in range(16))
-	//data = json.dumps({"name": group_name, "key": key})
-	//resp = self.session.post(url, verify=False, data=data)
-	//if resp.status_code == 200:
-	//self.tc_groups = TeamCityClient.get_tc_groups(self)
-	//else:
-	//print("Error: Couldn't create group {}\n{}".format(group_name, resp.content))
-}
+func (user User) createUser(conn Connection, client http.Client) {
+	fmt.Println("Creating user", user.Username)
+	//url := conn.url + "/users"
+	url := "http://localhost/app/rest/users"
+	data, err := json.Marshal(user)
+	if err != nil {
+		panic(err)
+	}
 
-func createGroup(conn Connection, client http.Client) {
-	//def create_user(self, user):
-	//print("Creating user {}".format(user['username']))
-	//url = self.rest_url + 'users'
-	//   if not user['email']:
-	//user['email'] = ''
-	//data = json.dumps({u'username': user['username'], u'name': user['name'], u'email': user['email']})
-	//
-	//resp = self.session.post(url, verify=False, data=data)
-	//if resp.status_code == 200:
-	//self.tc_users = TeamCityClient.get_tc_users(self)
-	//else:
-	//print("Error: Couldn't create user {}\n{}".format(user['username'], resp.content))
+	searcherReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+	searcherReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
+	defer resp.Body.Close()
 }
 
 func main() {
@@ -292,10 +321,18 @@ func main() {
 	client := &http.Client{}
 	connection := Connection{*teamcity, tcUsername, *password}
 
+	ldapUsers := getUsersLDAP(getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", *l), "dc=ptsecurity,dc=ru", *l)
+
 	userList := getUsersTC(connection, *client)
 	fish := userList.UsersList[255]
-	fGroup := fish.getUserGroups(connection, *client)
-	myh := fGroup.GroupList[1]
-	fmt.Println(myh)
-	myh.getUsersFromGroup(connection, *client)
+	fish.createUser(connection, *client)
+
+	for _, user := range ldapUsers {
+		user.createUser(connection, *client)
+	}
+
+	//fGroup := fish.getUserGroups(connection, *client)
+	//myh := fGroup.GroupList[1]
+	//fmt.Println(myh)
+	//myh.getUsersFromGroup(connection, *client)
 }
