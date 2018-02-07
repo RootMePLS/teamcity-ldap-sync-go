@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+type Connection struct {
+	url      string
+	login    string
+	password string
+}
+
 type Users struct {
 	UsersList []User `json:"user"`
 }
@@ -33,7 +39,7 @@ type Group struct {
 	Href string `json:"href"`
 }
 
-func getUsersFromAD(groupName, baseDN string, link ldap.Conn) []User {
+func getUsersLDAP(groupName, baseDN string, link ldap.Conn) []User {
 
 	var userList []User
 
@@ -56,13 +62,13 @@ func getUsersFromAD(groupName, baseDN string, link ldap.Conn) []User {
 	}
 
 	for _, entry := range sr.Entries {
-		userList = append(userList, getUserAttributes(entry.DN, baseDN, link))
+		userList = append(userList, getUserAttributesLDAP(entry.DN, baseDN, link))
 	}
 
 	return userList
 }
 
-func getUserAttributes(userDN, baseDN string, link ldap.Conn) User {
+func getUserAttributesLDAP(userDN, baseDN string, link ldap.Conn) User {
 	var user User
 
 	filter := fmt.Sprintf("(distinguishedName=%s)", userDN)
@@ -92,7 +98,7 @@ func getUserAttributes(userDN, baseDN string, link ldap.Conn) User {
 	return user
 }
 
-func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
+func getGroupDNLDAP(groupName, baseDN string, link ldap.Conn) string {
 
 	filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", groupName)
 	searchRequest := ldap.NewSearchRequest(
@@ -115,13 +121,13 @@ func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
 	return sr.Entries[0].DN
 }
 
-func getTCGroups(url, login, password string, client http.Client) Groups {
+func getGroupsTC(conn Connection, client http.Client) Groups {
 
-	url = "/app/rest/userGroups"
+	url := conn.url + "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(login, password)
+	searcherReq.SetBasicAuth(conn.login, conn.password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -137,13 +143,13 @@ func getTCGroups(url, login, password string, client http.Client) Groups {
 	return groups
 }
 
-func getTCUsers(url, login, password string, client http.Client) Users {
+func getUsersTC(conn Connection, client http.Client) Users {
 
-	url = url + "/app/rest/users"
+	url := conn.url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(login, password)
+	searcherReq.SetBasicAuth(conn.login, conn.password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -159,12 +165,12 @@ func getTCUsers(url, login, password string, client http.Client) Users {
 	return users
 }
 
-func (u User) getTCUserGroups(url, username, login, password string, client http.Client) Groups {
-	url = url + "/app/rest/users/" + username + "/groups"
+func (user User) getUserGroups(conn Connection, client http.Client) Groups {
+	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(login, password)
+	searcherReq.SetBasicAuth(conn.login, conn.password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -178,6 +184,81 @@ func (u User) getTCUserGroups(url, username, login, password string, client http
 	json.Unmarshal(body, &userGroups)
 
 	return userGroups
+}
+
+func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users {
+	var users Users
+	//def get_users_from_group(self, group_name):
+	//if [group['key'] for group in self.tc_groups if group['name'] == group_name]:
+	//key = [group['key'] for group in self.tc_groups if group['name'] == group_name][0]
+	//url = self.rest_url + 'userGroups/key:' + key
+	//resp = self.session.get(url, verify=False)
+	//resp.raise_for_status()
+	//if resp.status_code != 200:
+	//Exception("Error: Couldn't find group {}\n{}".format(group_name, resp.content))
+	//users = resp.json()['users']['user']
+	//return [user['username'] for user in users if users]
+	//else:
+	//return []
+	return users
+}
+
+func (user User) addUserToGroup(conn Connection, client http.Client) {
+	//def add_user_to_group(self, user, group_name):
+	//print("Adding user {} to group {}".format(user, group_name))
+	//url = self.rest_url + 'users/' + user + '/groups'
+	//   user_groups = TeamCityClient.get_user_groups(self, user)
+	//href = [group['href'] for group in self.tc_groups if group['name'] == group_name][0]
+	//key = [group['key'] for group in self.tc_groups if group['name'] == group_name][0]
+	//new_group = {u'href': href,
+	//	u'name': group_name,
+	//	u'key': key}
+	//user_groups['group'].append(new_group)
+	//data = json.dumps(user_groups)
+	//resp = self.session.put(url, data=data, verify=False)
+	//if resp.status_code != 200:
+	//print("Error: Couldn't add user {} to group {}\n{}".format(user, group_name, resp.content))
+}
+
+func (user User) removeUserFromGroup(conn Connection, client http.Client) {
+	//print("Removing user {} from group {}".format(user, group_name))
+	//url = self.rest_url + 'users/' + user + '/groups'
+	//   user_groups = TeamCityClient.get_user_groups(self, user)
+	//for group in user_groups['group']:
+	//if group['name'] == group_name:
+	//user_groups['group'].remove(group)
+	//data = json.dumps(user_groups)
+	//resp = self.session.put(url, data=data, verify=False)
+	//if resp.status_code != 200:
+	//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
+}
+
+func (user User) createUser(conn Connection, client http.Client) {
+	//def create_group(self, group_name):
+	//print("Creating group {} in TC".format(group_name))
+	//url = self.rest_url + 'userGroups'
+	//   key = ''.join(random.choice('0123456789ABCDEF') for i in range(16))
+	//data = json.dumps({"name": group_name, "key": key})
+	//resp = self.session.post(url, verify=False, data=data)
+	//if resp.status_code == 200:
+	//self.tc_groups = TeamCityClient.get_tc_groups(self)
+	//else:
+	//print("Error: Couldn't create group {}\n{}".format(group_name, resp.content))
+}
+
+func (user User) createGroup(conn Connection, client http.Client) {
+	//def create_user(self, user):
+	//print("Creating user {}".format(user['username']))
+	//url = self.rest_url + 'users'
+	//   if not user['email']:
+	//user['email'] = ''
+	//data = json.dumps({u'username': user['username'], u'name': user['name'], u'email': user['email']})
+	//
+	//resp = self.session.post(url, verify=False, data=data)
+	//if resp.status_code == 200:
+	//self.tc_users = TeamCityClient.get_tc_users(self)
+	//else:
+	//print("Error: Couldn't create user {}\n{}".format(user['username'], resp.content))
 }
 
 func main() {
@@ -203,9 +284,11 @@ func main() {
 	}
 
 	client := &http.Client{}
-	userList := getTCUsers(*teamcity, tcUsername, *password, *client)
+	connection := Connection{*teamcity, tcUsername, *password}
+
+	userList := getUsersTC(connection, *client)
 	fmt.Println(userList.UsersList[255])
 	fish := userList.UsersList[255]
-	fGroups := fish.getTCUserGroups(*teamcity, fish.Username, tcUsername, *password, *client)
+	fGroups := fish.getUserGroups(connection, *client)
 	fmt.Println(fGroups)
 }
