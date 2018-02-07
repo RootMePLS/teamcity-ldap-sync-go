@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 
 	"encoding/json"
+	"strings"
 )
 
 type Users struct {
@@ -16,7 +17,7 @@ type Users struct {
 }
 
 type User struct {
-	Id       int `json:"id"`
+	Id       int    `json:"id"`
 	Username string `json:"username"`
 	Name     string `json:"name"`
 	Href     string `json:"href"`
@@ -115,15 +116,13 @@ func getGroupDN(groupName, baseDN string, link ldap.Conn) string {
 	return sr.Entries[0].DN
 }
 
-func getTCGroups() {
+func getTCGroups(url, username, password string, client http.Client) Groups {
 
-	client := &http.Client{}
-
-
+	url = "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-
+	searcherReq.SetBasicAuth(username, password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -136,23 +135,16 @@ func getTCGroups() {
 	var groups Groups
 	json.Unmarshal(body, &groups)
 
-	fmt.Println(groups, "\n", len(groups.GroupList))
-
-	//resp = self.session.get(url, verify=False)
-	//resp.raise_for_status()
-	//groups_in_tc = resp.json()
-	//return [group for group in groups_in_tc['group']]
+	return groups
 }
 
-func getTCUsers() {
+func getTCUsers(url, username, password string, client http.Client) Users {
 
-	client := &http.Client{}
-
-
+	url = url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
-
+	searcherReq.SetBasicAuth(username, password)
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
@@ -165,12 +157,7 @@ func getTCUsers() {
 	var users Users
 	json.Unmarshal(body, &users)
 
-	fmt.Println(users, "\n", len(users.UsersList))
-
-	//resp = self.session.get(url, verify=False)
-	//resp.raise_for_status()
-	//groups_in_tc = resp.json()
-	//return [group for group in groups_in_tc['group']]
+	return users
 }
 
 func main() {
@@ -178,9 +165,10 @@ func main() {
 	username := flag.String("username", "username@domain.com", "Domain login for auth")
 	password := flag.String("password", "topSecret", "Password for auth")
 	server := flag.String("server", "domain.com", "Address of LDAP server")
+	teamcity := flag.String("teamcity", "https://teamcity.domain.com", "Address of LDAP server")
 	port := flag.String("port", "389", "Port of LDAP server")
-
 	flag.Parse()
+	tcUsername := strings.Split(*username, "@")[0]
 
 	// No TLS, not recommended
 	l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%s", *server, *port))
@@ -235,5 +223,7 @@ func main() {
 	//}
 	//getTCGroups()
 	//
-	getTCUsers()
+	client := &http.Client{}
+	userList := getTCUsers(*teamcity, tcUsername, *password, *client)
+	fmt.Println(userList)
 }
