@@ -37,6 +37,7 @@ type Group struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
 	Href string `json:"href"`
+	Users  Users  `json:"users"`
 }
 
 func getUsersLDAP(groupName, baseDN string, link ldap.Conn) []User {
@@ -187,20 +188,25 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 }
 
 func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users {
-	var users Users
-	//def get_users_from_group(self, group_name):
-	//if [group['key'] for group in self.tc_groups if group['name'] == group_name]:
-	//key = [group['key'] for group in self.tc_groups if group['name'] == group_name][0]
-	//url = self.rest_url + 'userGroups/key:' + key
-	//resp = self.session.get(url, verify=False)
-	//resp.raise_for_status()
-	//if resp.status_code != 200:
-	//Exception("Error: Couldn't find group {}\n{}".format(group_name, resp.content))
-	//users = resp.json()['users']['user']
-	//return [user['username'] for user in users if users]
-	//else:
-	//return []
-	return users
+
+	url := conn.url + group.Href
+	searcherReq, err := http.NewRequest("GET", url, nil)
+	searcherReq.Header.Add("Content-type", "application/json")
+	searcherReq.Header.Add("Accept", "application/json")
+	searcherReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(searcherReq)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+
+	var users Group
+	json.Unmarshal(body, &users)
+
+	return users.Users
 }
 
 func (user User) addUserToGroup(conn Connection, client http.Client) {
@@ -287,8 +293,9 @@ func main() {
 	connection := Connection{*teamcity, tcUsername, *password}
 
 	userList := getUsersTC(connection, *client)
-	fmt.Println(userList.UsersList[255])
 	fish := userList.UsersList[255]
-	fGroups := fish.getUserGroups(connection, *client)
-	fmt.Println(fGroups)
+	fGroup := fish.getUserGroups(connection, *client)
+	myh := fGroup.GroupList[1]
+	fmt.Println(myh)
+	myh.getUsersFromGroup(connection, *client)
 }
