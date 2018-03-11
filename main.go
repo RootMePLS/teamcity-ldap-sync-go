@@ -1,15 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"gopkg.in/ldap.v2"
-	"log"
-	"flag"
-	"net/http"
-	"io/ioutil"
-	"encoding/json"
-	"strings"
 	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"sync"
+
+	"gopkg.in/ldap.v2"
 )
 
 type Connection struct {
@@ -41,7 +42,7 @@ type Group struct {
 	Users Users  `json:"users"`
 }
 
-func getUsersLDAP(groupName, baseDN string, link ldap.Conn) []User {
+func getUsersLDAP(groupName, baseDN string, link *ldap.Conn) []User {
 
 	var userList []User
 
@@ -70,7 +71,7 @@ func getUsersLDAP(groupName, baseDN string, link ldap.Conn) []User {
 	return userList
 }
 
-func getUserAttributesLDAP(userDN, baseDN string, link ldap.Conn) User {
+func getUserAttributesLDAP(userDN, baseDN string, link *ldap.Conn) User {
 	var user User
 
 	filter := fmt.Sprintf("(distinguishedName=%s)", userDN)
@@ -100,7 +101,7 @@ func getUserAttributesLDAP(userDN, baseDN string, link ldap.Conn) User {
 	return user
 }
 
-func getGroupDNLDAP(groupName, baseDN string, link ldap.Conn) string {
+func getGroupDNLDAP(groupName, baseDN string, link *ldap.Conn) string {
 
 	filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", groupName)
 	searchRequest := ldap.NewSearchRequest(
@@ -147,7 +148,7 @@ func getGroupsTC(conn Connection, client http.Client) Groups {
 
 func getUsersTC(conn Connection, client http.Client) Users {
 
-	url := conn.url + "/app/rest/users"
+	url := "http://" + conn.url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
@@ -197,7 +198,7 @@ func createGroup(groupName string, conn Connection, client http.Client) {
 	//key = ''.join(random.choice('0123456789ABCDEF') for i in range(16))
 	//data = json.dumps({"name": group_name, "key": key})
 
-	data, err := json.Marshal({groupName})
+	data, err := json.Marshal(groupName)
 
 	if err != nil {
 		panic(err)
@@ -271,7 +272,8 @@ func (user User) removeUserFromGroup(conn Connection, client http.Client) {
 	//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
 }
 
-func (user User) createUser(conn Connection, client http.Client) {
+func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGroup) {
+	defer wg.Done()
 	fmt.Println("Creating user", user.Username)
 	//url := conn.url + "/users"
 	url := "http://localhost/app/rest/users"
@@ -297,14 +299,13 @@ func (user User) createUser(conn Connection, client http.Client) {
 }
 
 func main() {
-
 	username := flag.String("username", "username@domain.com", "Domain login for auth")
 	password := flag.String("password", "topSecret", "Password for auth")
 	server := flag.String("server", "domain.com", "Address of LDAP server")
 	teamcity := flag.String("teamcity", "https://teamcity.domain.com", "Address of LDAP server")
 	port := flag.String("port", "389", "Port of LDAP server")
+	tcUsername := flag.String("tcUser", "", "User for TC with admin permissions")
 	flag.Parse()
-	tcUsername := strings.Split(*username, "@")[0]
 
 	// No TLS, not recommended
 	l, err := ldap.Dial("tcp", fmt.Sprintf("%s:%s", *server, *port))
@@ -319,17 +320,22 @@ func main() {
 	}
 
 	client := &http.Client{}
-	connection := Connection{*teamcity, tcUsername, *password}
+	connection := Connection{*teamcity, *tcUsername, *password}
 
-	ldapUsers := getUsersLDAP(getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", *l), "dc=ptsecurity,dc=ru", *l)
+	groupDN := getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", l)
+	ldapUsers := getUsersLDAP(groupDN, "dc=ptsecurity,dc=ru", l)
 
-	userList := getUsersTC(connection, *client)
-	fish := userList.UsersList[255]
-	fish.createUser(connection, *client)
+	// userList := getUsersTC(connection, *client)
+	// fish := userList.UsersList[0]
+	// fish.createUser(connection, *client, wg)
+
+	wg := &sync.WaitGroup{}
 
 	for _, user := range ldapUsers {
-		user.createUser(connection, *client)
+		wg.Add(1)
+		go user.createUser(connection, *client, wg)
 	}
+	wg.Wait()
 
 	//fGroup := fish.getUserGroups(connection, *client)
 	//myh := fGroup.GroupList[1]
