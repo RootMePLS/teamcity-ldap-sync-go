@@ -148,7 +148,7 @@ func getGroupsTC(conn Connection, client http.Client) Groups {
 
 func getUsersTC(conn Connection, client http.Client) Users {
 
-	url := "http://" + conn.url + "/app/rest/users"
+	url := conn.url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
@@ -211,7 +211,7 @@ func createGroup(groupName string, conn Connection, client http.Client) {
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
-		panic(err)
+		// panic(err)
 		fmt.Println("response Status:", resp.Status)
 		fmt.Println("response Headers:", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -289,7 +289,7 @@ func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGr
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
-		panic(err)
+		// panic(err)
 		fmt.Println("response Status:", resp.Status)
 		fmt.Println("response Headers:", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -298,13 +298,23 @@ func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGr
 	defer resp.Body.Close()
 }
 
+func userInTC(ldapUser User, tcUsers Users) bool {
+	for _, tcUser := range tcUsers.UsersList {
+		if tcUser.Username == ldapUser.Username {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	username := flag.String("username", "username@domain.com", "Domain login for auth")
 	password := flag.String("password", "topSecret", "Password for auth")
 	server := flag.String("server", "domain.com", "Address of LDAP server")
-	teamcity := flag.String("teamcity", "https://teamcity.domain.com", "Address of LDAP server")
+	tcServer := flag.String("tcServer", "https://teamcity.domain.com", "Address of LDAP server")
 	port := flag.String("port", "389", "Port of LDAP server")
-	tcUsername := flag.String("tcUser", "", "User for TC with admin permissions")
+	tcUser := flag.String("tcUser", "", "User for TC with admin permissions")
+	tcPassword := flag.String("tcPassword", "", "User for TC with admin permissions")
 	flag.Parse()
 
 	// No TLS, not recommended
@@ -316,12 +326,13 @@ func main() {
 
 	err = l.Bind(*username, *password)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 	}
 
 	client := &http.Client{}
-	connection := Connection{*teamcity, *tcUsername, *password}
+	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
+	tcUsers := getUsersTC(connection, *client)
 	groupDN := getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", l)
 	ldapUsers := getUsersLDAP(groupDN, "dc=ptsecurity,dc=ru", l)
 
@@ -331,9 +342,11 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 
-	for _, user := range ldapUsers {
-		wg.Add(1)
-		go user.createUser(connection, *client, wg)
+	for _, ldapUser := range ldapUsers {
+		if !userInTC(ldapUser, tcUsers) {
+			wg.Add(1)
+			go ldapUser.createUser(connection, *client, wg)
+		}
 	}
 	wg.Wait()
 
@@ -341,4 +354,5 @@ func main() {
 	//myh := fGroup.GroupList[1]
 	//fmt.Println(myh)
 	//myh.getUsersFromGroup(connection, *client)
+	fmt.Println("Done")
 }
