@@ -333,8 +333,8 @@ func main() {
 	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
 	tcUsers := getUsersTC(connection, *client)
-	groupDN := getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", l)
-	ldapUsers := getUsersLDAP(groupDN, "dc=ptsecurity,dc=ru", l)
+	groupDN := getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	ldapUsers := getUsersLDAP(groupDN, "dc=ptsecurity,dc=ru", l)    // base брать из лдап конекшн
 
 	// userList := getUsersTC(connection, *client)
 	// fish := userList.UsersList[0]
