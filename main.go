@@ -415,5 +415,5 @@ func main() {
 	//myh := fGroup.GroupList[1]
 	//fmt.Println(myh)
 	//myh.getUsersFromGroup(connection, *client)
-	fmt.Println("Done")
+	fmt.Println("Done!")
 }
