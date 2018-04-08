@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 
 	"gopkg.in/ldap.v2"
 )
+
+const letterBytes = "0123456789ABCDEF"
 
 type Connection struct {
 	url      string
@@ -42,7 +46,7 @@ type Group struct {
 	Users Users  `json:"users"`
 }
 
-func getUsersLDAP(groupName, baseDN string, link *ldap.Conn) []User {
+func getLDAPUsers(groupName, baseDN string, link *ldap.Conn) []User {
 
 	var userList []User
 
@@ -65,13 +69,13 @@ func getUsersLDAP(groupName, baseDN string, link *ldap.Conn) []User {
 	}
 
 	for _, entry := range sr.Entries {
-		userList = append(userList, getUserAttributesLDAP(entry.DN, baseDN, link))
+		userList = append(userList, getLDAPUserAttributes(entry.DN, baseDN, link))
 	}
 
 	return userList
 }
 
-func getUserAttributesLDAP(userDN, baseDN string, link *ldap.Conn) User {
+func getLDAPUserAttributes(userDN, baseDN string, link *ldap.Conn) User {
 	var user User
 
 	filter := fmt.Sprintf("(distinguishedName=%s)", userDN)
@@ -101,7 +105,7 @@ func getUserAttributesLDAP(userDN, baseDN string, link *ldap.Conn) User {
 	return user
 }
 
-func getGroupDNLDAP(groupName, baseDN string, link *ldap.Conn) string {
+func getGroupDN(groupName, baseDN string, link *ldap.Conn) ([]string, []string) {
 
 	filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", groupName)
 	searchRequest := ldap.NewSearchRequest(
@@ -121,13 +125,24 @@ func getGroupDNLDAP(groupName, baseDN string, link *ldap.Conn) string {
 		log.Fatal(err)
 	}
 
-	return sr.Entries[0].DN
+	var dnList []string
+	var cnList []string
+
+	for _, group := range sr.Entries {
+		dnList = append(dnList, group.DN)
+		cnList = append(cnList, group.GetAttributeValues("cn")[0])
+	}
+
+	return dnList, cnList
 }
 
-func getGroupsTC(conn Connection, client http.Client) Groups {
+func getTCGroups(conn Connection, client http.Client) Groups {
 
 	url := conn.url + "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err)
+	}
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 	searcherReq.SetBasicAuth(conn.login, conn.password)
@@ -139,17 +154,26 @@ func getGroupsTC(conn Connection, client http.Client) Groups {
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+	}
 
 	var groups Groups
-	json.Unmarshal(body, &groups)
+	err = json.Unmarshal(body, &groups)
+	if err != nil {
+		log.Println(err)
+	}
 
 	return groups
 }
 
-func getUsersTC(conn Connection, client http.Client) Users {
+func getTCUsers(conn Connection, client http.Client) Users {
 
 	url := conn.url + "/app/rest/users"
 	searcherReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err)
+	}
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 	searcherReq.SetBasicAuth(conn.login, conn.password)
@@ -161,10 +185,15 @@ func getUsersTC(conn Connection, client http.Client) Users {
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+	}
 
 	var users Users
-	json.Unmarshal(body, &users)
-
+	err = json.Unmarshal(body, &users)
+	if err != nil {
+		log.Println(err)
+	}
 	return users
 }
 
@@ -172,6 +201,9 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 
 	url := conn.url + group.Href
 	searcherReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err)
+	}
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 	searcherReq.SetBasicAuth(conn.login, conn.password)
@@ -183,22 +215,28 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+	}
 
 	var users Group
-	json.Unmarshal(body, &users)
+	err = json.Unmarshal(body, &users)
+	if err != nil {
+		log.Println(err)
+	}
 
 	return users.Users
 }
 
 func createGroup(groupName string, conn Connection, client http.Client) {
 	fmt.Println("Creating group", groupName)
-	//url := conn.url + "/users"
-	url := "http://localhost/app/rest/userGroups"
+	var group Group
+	url := conn.url + "/app/rest/userGroups"
 
-	//key = ''.join(random.choice('0123456789ABCDEF') for i in range(16))
-	//data = json.dumps({"name": group_name, "key": key})
+	group.Key = RandStringBytes(16)
+	group.Name = groupName
 
-	data, err := json.Marshal(groupName)
+	data, err := json.Marshal(group)
 
 	if err != nil {
 		panic(err)
@@ -224,6 +262,9 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 
 	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println(err)
+	}
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 	searcherReq.SetBasicAuth(conn.login, conn.password)
@@ -235,9 +276,15 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+	}
 
 	var userGroups Groups
-	json.Unmarshal(body, &userGroups)
+	err = json.Unmarshal(body, &userGroups)
+	if err != nil {
+		log.Println(err)
+	}
 
 	return userGroups
 }
@@ -275,14 +322,16 @@ func (user User) removeUserFromGroup(conn Connection, client http.Client) {
 func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGroup) {
 	defer wg.Done()
 	fmt.Println("Creating user", user.Username)
-	//url := conn.url + "/users"
-	url := "http://localhost/app/rest/users"
+	url := conn.url + "/app/rest/users"
 	data, err := json.Marshal(user)
 	if err != nil {
 		panic(err)
 	}
 
 	searcherReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		log.Println(err)
+	}
 	searcherReq.Header.Add("Content-type", "application/json")
 	searcherReq.Header.Add("Accept", "application/json")
 	searcherReq.SetBasicAuth(conn.login, conn.password)
@@ -300,21 +349,29 @@ func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGr
 
 func userInTC(ldapUser User, tcUsers Users) bool {
 	for _, tcUser := range tcUsers.UsersList {
-		if tcUser.Username == ldapUser.Username {
+		if strings.ToLower(tcUser.Username) == strings.ToLower(ldapUser.Username) {
 			return true
 		}
 	}
 	return false
 }
 
+func RandStringBytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
+
 func main() {
 	username := flag.String("username", "username@domain.com", "Domain login for auth")
 	password := flag.String("password", "topSecret", "Password for auth")
 	server := flag.String("server", "domain.com", "Address of LDAP server")
-	tcServer := flag.String("tcServer", "https://teamcity.domain.com", "Address of LDAP server")
+	// tcServer := flag.String("tcServer", "https://teamcity.domain.com", "Address of LDAP server")
 	port := flag.String("port", "389", "Port of LDAP server")
-	tcUser := flag.String("tcUser", "", "User for TC with admin permissions")
-	tcPassword := flag.String("tcPassword", "", "User for TC with admin permissions")
+	// tcUser := flag.String("tcUser", "", "User for TC with admin permissions")
+	// tcPassword := flag.String("tcPassword", "", "User for TC with admin permissions")
 	flag.Parse()
 
 	// No TLS, not recommended
@@ -329,26 +386,30 @@ func main() {
 		log.Fatal(err)
 	}
 
-	client := &http.Client{}
-	connection := Connection{*tcServer, *tcUser, *tcPassword}
+	// client := &http.Client{}
+	// connection := Connection{*tcServer, *tcUser, *tcPassword}
 
-	tcUsers := getUsersTC(connection, *client)
-	groupDN := getGroupDNLDAP("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
-	ldapUsers := getUsersLDAP(groupDN, "dc=ptsecurity,dc=ru", l)    // base брать из лдап конекшн
+	// использовать функцию только если есть флаг WILDCARD
+	_, groupCNs := getGroupDN("R.MPX.QA*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	for _, group := range groupCNs {
+		fmt.Println(group)
+	}
+	// ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
+	// tcUsers := getTCUsers(connection, *client)
 
-	// userList := getUsersTC(connection, *client)
+	// userList := getTCUsers(connection, *client)
 	// fish := userList.UsersList[0]
 	// fish.createUser(connection, *client, wg)
 
-	wg := &sync.WaitGroup{}
+	// wg := &sync.WaitGroup{}
 
-	for _, ldapUser := range ldapUsers {
-		if !userInTC(ldapUser, tcUsers) {
-			wg.Add(1)
-			go ldapUser.createUser(connection, *client, wg)
-		}
-	}
-	wg.Wait()
+	// for _, ldapUser := range ldapUsers {
+	// 	if !userInTC(ldapUser, tcUsers) {
+	// 		wg.Add(1)
+	// 		go ldapUser.createUser(connection, *client, wg)
+	// 	}
+	// }
+	// wg.Wait()
 
 	//fGroup := fish.getUserGroups(connection, *client)
 	//myh := fGroup.GroupList[1]
