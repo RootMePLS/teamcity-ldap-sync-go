@@ -24,7 +24,7 @@ type Connection struct {
 }
 
 type Users struct {
-	UsersList []User `json:"user"`
+	UsersList []User `json:"user,omitempty"`
 }
 
 type User struct {
@@ -40,10 +40,11 @@ type Groups struct {
 }
 
 type Group struct {
-	Key   string `json:"key"`
-	Name  string `json:"name"`
-	Href  string `json:"href"`
-	Users Users  `json:"users"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Href        string `json:"href,omitempty"`
+	Description string `json:"description,omitempty"`
+	Users       *Users `json:"users,omitempty"`
 }
 
 func getLDAPUsers(groupName, baseDN string, link *ldap.Conn) []User {
@@ -136,7 +137,7 @@ func getGroupDN(groupName, baseDN string, link *ldap.Conn) ([]string, []string) 
 	return dnList, cnList
 }
 
-func getTCGroups(conn Connection, client http.Client) Groups {
+func getTCGroups(conn Connection, client http.Client) []string {
 
 	url := conn.url + "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
@@ -158,10 +159,15 @@ func getTCGroups(conn Connection, client http.Client) Groups {
 		log.Println(err)
 	}
 
-	var groups Groups
-	err = json.Unmarshal(body, &groups)
+	var raw_groups Groups
+	err = json.Unmarshal(body, &raw_groups)
 	if err != nil {
 		log.Println(err)
+	}
+
+	var groups []string
+	for _, group := range raw_groups.GroupList {
+		groups = append(groups, group.Name)
 	}
 
 	return groups
@@ -225,7 +231,16 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 		log.Println(err)
 	}
 
-	return users.Users
+	return *users.Users
+}
+
+func isExist(group string, tcGroups []string) bool {
+	for _, tcGroup := range tcGroups {
+		if tcGroup == group {
+			return true
+		}
+	}
+	return false
 }
 
 func createGroup(groupName string, conn Connection, client http.Client) {
@@ -242,17 +257,23 @@ func createGroup(groupName string, conn Connection, client http.Client) {
 		panic(err)
 	}
 
-	searcherReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	searcherReq.Header.Add("Content-type", "application/json")
-	searcherReq.Header.Add("Accept", "application/json")
-	searcherReq.SetBasicAuth(conn.login, conn.password)
-
-	resp, err := client.Do(searcherReq)
+	createReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
+		log.Println(err)
+	}
+	createReq.Header.Add("Content-type", "application/json")
+	createReq.Header.Add("Accept", "application/json")
+	createReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(createReq)
+	if err != nil || resp.StatusCode > 300 {
 		// panic(err)
 		fmt.Println("response Status:", resp.Status)
 		fmt.Println("response Headers:", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+		}
 		fmt.Println("response Body:", string(body))
 	}
 	defer resp.Body.Close()
@@ -368,10 +389,10 @@ func main() {
 	username := flag.String("username", "username@domain.com", "Domain login for auth")
 	password := flag.String("password", "topSecret", "Password for auth")
 	server := flag.String("server", "domain.com", "Address of LDAP server")
-	// tcServer := flag.String("tcServer", "https://teamcity.domain.com", "Address of LDAP server")
+	tcServer := flag.String("tcServer", "https://teamcity.domain.com", "Address of LDAP server")
 	port := flag.String("port", "389", "Port of LDAP server")
-	// tcUser := flag.String("tcUser", "", "User for TC with admin permissions")
-	// tcPassword := flag.String("tcPassword", "", "User for TC with admin permissions")
+	tcUser := flag.String("tcUser", "", "User for TC with admin permissions")
+	tcPassword := flag.String("tcPassword", "", "User for TC with admin permissions")
 	flag.Parse()
 
 	// No TLS, not recommended
@@ -386,14 +407,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// client := &http.Client{}
-	// connection := Connection{*tcServer, *tcUser, *tcPassword}
+	client := &http.Client{}
+	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
 	// использовать функцию только если есть флаг WILDCARD
-	_, groupCNs := getGroupDN("R.MPX.QA*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
-	for _, group := range groupCNs {
-		fmt.Println(group)
-	}
+	_, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+
 	// ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
 	// tcUsers := getTCUsers(connection, *client)
 
@@ -415,5 +434,12 @@ func main() {
 	//myh := fGroup.GroupList[1]
 	//fmt.Println(myh)
 	//myh.getUsersFromGroup(connection, *client)
+	tcGroups := getTCGroups(connection, *client)
+
+	for _, group := range groupCNs {
+		if !isExist(group, tcGroups) {
+			createGroup(group, connection, *client)
+		}
+	}
 	fmt.Println("Done")
 }
