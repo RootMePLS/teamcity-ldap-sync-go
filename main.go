@@ -167,10 +167,10 @@ func getTCGroups(conn Connection, client http.Client) []string {
 		log.Println(err)
 	}
 
-	var groups []string
-	for _, group := range raw_groups.GroupList {
-		groups = append(groups, group.Name)
-	}
+	// var groups []string
+	// for _, group := range raw_groups.GroupList {
+	// 	groups = append(groups, group.Name)
+	// }
 
 	return groups
 }
@@ -310,21 +310,36 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 	return userGroups
 }
 
-func (user User) addUserToGroup(conn Connection, client http.Client) {
-	//def add_user_to_group(self, user, group_name):
-	//print("Adding user {} to group {}".format(user, group_name))
-	//url = self.rest_url + 'users/' + user + '/groups'
-	//   user_groups = TeamCityClient.get_user_groups(self, user)
-	//href = [group['href'] for group in self.tc_groups if group['name'] == group_name][0]
-	//key = [group['key'] for group in self.tc_groups if group['name'] == group_name][0]
-	//new_group = {u'href': href,
-	//	u'name': group_name,
-	//	u'key': key}
-	//user_groups['group'].append(new_group)
-	//data = json.dumps(user_groups)
-	//resp = self.session.put(url, data=data, verify=False)
-	//if resp.status_code != 200:
-	//print("Error: Couldn't add user {} to group {}\n{}".format(user, group_name, resp.content))
+func (user User) addUserToGroup(group Group, conn Connection, client http.Client) {
+	str := fmt.Sprintf("Adding user %s to group %s", user.Name, group.Name)
+	fmt.Println(str)
+	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
+	userGroups := user.getUserGroups(conn, client)
+	userGroups.GroupList = append(userGroups.GroupList, group)
+	data, err := json.Marshal(userGroups)
+	if err != nil {
+		panic(err)
+	}
+
+	createReq, err := http.NewRequest("PUT", url, bytes.NewBuffer(data))
+	if err != nil {
+		log.Println(err)
+	}
+	createReq.Header.Add("Content-type", "application/json")
+	createReq.Header.Add("Accept", "application/json")
+	createReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(createReq)
+	defer resp.Body.Close()
+
+	if err != nil || resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+		}
+		fmt.Println("response Body:", string(body))
+		//print("Error: Couldn't add user {} to group {}\n{}".format(user, group_name, resp.content))
+	}
 }
 
 func (user User) removeUserFromGroup(conn Connection, client http.Client) {
@@ -411,15 +426,16 @@ func main() {
 	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
 	// использовать функцию только если есть флаг WILDCARD
-	_, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	// _, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
 
 	// ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
 	// tcUsers := getTCUsers(connection, *client)
 
 	// userList := getTCUsers(connection, *client)
-	// fish := userList.UsersList[0]
-	// fish.createUser(connection, *client, wg)
 
+	fish := getTCUsers(connection, *client).UsersList[0]
+	// fish.createUser(connection, *client, wg)
+	fmt.Println(fish)
 	// wg := &sync.WaitGroup{}
 
 	// for _, ldapUser := range ldapUsers {
@@ -430,16 +446,19 @@ func main() {
 	// }
 	// wg.Wait()
 
-	//fGroup := fish.getUserGroups(connection, *client)
-	//myh := fGroup.GroupList[1]
-	//fmt.Println(myh)
+	fGroup := fish.getUserGroups(connection, *client)
+	myh := fGroup.GroupList[0]
+	fmt.Println(myh.Name)
 	//myh.getUsersFromGroup(connection, *client)
-	inTCGroups := getTCGroups(connection, *client)
-
-	for _, ldapGroup := range groupCNs {
-		if !exist(ldapGroup, inTCGroups) {
-			createGroup(ldapGroup, connection, *client)
-		}
+	tcGroups := getTCGroups(connection, *client)
+	for _, tcGroup := range tcGroups {
+		fish.addUserToGroup(tcGroup, connection, *client)
 	}
+
+	// for _, ldapGroup := range groupCNs {
+	// 	if !exist(ldapGroup, tcGroups) {
+	// 		createGroup(ldapGroup, connection, *client)
+	// 	}
+	// }
 	fmt.Println("Done")
 }
