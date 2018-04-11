@@ -275,6 +275,8 @@ func createGroup(groupName string, conn Connection, client http.Client) {
 			log.Println(err)
 		}
 		fmt.Println("response Body:", string(body))
+	} else {
+		// добавляем группу в список существующих групп
 	}
 	defer resp.Body.Close()
 }
@@ -434,7 +436,9 @@ func main() {
 	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
 	// использовать функцию только если есть флаг WILDCARD
-	// _, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+
+	// TODO: Возвращать map из getGroupDN make(map[string]string == groupDN:groupCN)
+	_, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
 
 	// ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
 	// tcUsers := getTCUsers(connection, *client)
@@ -472,8 +476,36 @@ func main() {
 	}
 	// for _, ldapGroup := range groupCNs {
 	// 	if !exist(ldapGroup, tcGroups) {
-	// 		createGroup(ldapGroup, connection, *client)
+	// createGroup(ldapGroup, connection, *client)
 	// 	}
 	// }
 	fmt.Println("Done")
+
+	// 	"""
+	//         groupDNs, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	//         for ldap_group in ldap_groups:
+	//             if self.ldap_object.group_exist(ldap_group): ### проверяем, что группа существует в АД
+	//                 print("Syncing group: {}\n{}".format(ldap_group, "=" * 20))
+	//                  # Get users from LDAP group
+	//                 ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
+
+	//             //  tcGroups := getTCGroups(connection, *client)
+	//             //  if !exist(ldapGroup, tcGroups) {
+	//             // 		createGroup(ldapGroup, connection, *client)
+	//             // 	}
+
+	//             // tcUsers := getTCUsers(connection, *client)
+	//             // for _, ldapUser := range ldapUsers {
+	//                 // if !userInTC(ldapUser, tcUsers) {
+	//                 //      wg.Add(1)
+	//                 // 		go ldapUser.createUser(connection, *client, wg)
+	//                 // 	}
+	//             // }
+	//             // tcGroupUsers := tcGroup.getUsersFromGroup(connection, *client)
+	//             // # Add users to TC group
+	//                 for user in ldapUsers.keys():
+	//                     if user not in tcGroupUsers:
+	//                         user.addUserToGroup(ldap_group)
+
+	// """
 }
