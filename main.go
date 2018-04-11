@@ -47,6 +47,8 @@ type Group struct {
 	Users       *Users `json:"users,omitempty"`
 }
 
+// TODO: есть ощущение, что количество кода можно сильно сократить через одну функцию которая принимает реквест и параметр, а внутри select'ом решает, что-куда
+
 func getLDAPUsers(groupName, baseDN string, link *ldap.Conn) []User {
 
 	var userList []User
