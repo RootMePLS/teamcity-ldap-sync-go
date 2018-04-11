@@ -234,7 +234,7 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 	return *users.Users
 }
 
-func isExist(group string, tcGroups []string) bool {
+func exist(group string, tcGroups []string) bool {
 	for _, tcGroup := range tcGroups {
 		if tcGroup == group {
 			return true
@@ -245,11 +245,12 @@ func isExist(group string, tcGroups []string) bool {
 
 func createGroup(groupName string, conn Connection, client http.Client) {
 	fmt.Println("Creating group", groupName)
-	var group Group
 	url := conn.url + "/app/rest/userGroups"
 
-	group.Key = RandStringBytes(16)
-	group.Name = groupName
+	group := Group{
+		Key:  RandStringBytes(16),
+		Name: groupName,
+	}
 
 	data, err := json.Marshal(group)
 
@@ -267,10 +268,7 @@ func createGroup(groupName string, conn Connection, client http.Client) {
 
 	resp, err := client.Do(createReq)
 	if err != nil || resp.StatusCode > 300 {
-		// panic(err)
-		fmt.Println("response Status:", resp.Status)
-		fmt.Println("response Headers:", resp.Header)
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Println(err)
 		}
@@ -434,11 +432,11 @@ func main() {
 	//myh := fGroup.GroupList[1]
 	//fmt.Println(myh)
 	//myh.getUsersFromGroup(connection, *client)
-	tcGroups := getTCGroups(connection, *client)
+	inTCGroups := getTCGroups(connection, *client)
 
-	for _, group := range groupCNs {
-		if !isExist(group, tcGroups) {
-			createGroup(group, connection, *client)
+	for _, ldapGroup := range groupCNs {
+		if !exist(ldapGroup, inTCGroups) {
+			createGroup(ldapGroup, connection, *client)
 		}
 	}
 	fmt.Println("Done")
