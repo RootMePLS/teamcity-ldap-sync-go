@@ -139,7 +139,7 @@ func getGroupDN(groupName, baseDN string, link *ldap.Conn) ([]string, []string) 
 	return dnList, cnList
 }
 
-func getTCGroups(conn Connection, client http.Client) []string {
+func getTCGroups(conn Connection, client http.Client) Groups {
 
 	url := conn.url + "/app/rest/userGroups"
 	searcherReq, err := http.NewRequest("GET", url, nil)
@@ -172,7 +172,7 @@ func getTCGroups(conn Connection, client http.Client) []string {
 	// 	groups = append(groups, group.Name)
 	// }
 
-	return groups
+	return raw_groups
 }
 
 func getTCUsers(conn Connection, client http.Client) Users {
@@ -310,11 +310,10 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 	return userGroups
 }
 
-func (user User) addUserToGroup(group Group, conn Connection, client http.Client) {
+func (user User) addUserToGroup(group Group, userGroups Groups, conn Connection, client http.Client) {
 	str := fmt.Sprintf("Adding user %s to group %s", user.Name, group.Name)
 	fmt.Println(str)
 	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
-	userGroups := user.getUserGroups(conn, client)
 	userGroups.GroupList = append(userGroups.GroupList, group)
 	data, err := json.Marshal(userGroups)
 	if err != nil {
@@ -392,6 +391,15 @@ func userInTC(ldapUser User, tcUsers Users) bool {
 	return false
 }
 
+func userInGroup(tcGroup Group, userGroups Groups) bool {
+	for _, group := range userGroups.GroupList {
+		if tcGroup.Name == group.Name {
+			return true
+		}
+	}
+	return false
+}
+
 func RandStringBytes(n int) string {
 	b := make([]byte, n)
 	for i := range b {
@@ -451,10 +459,17 @@ func main() {
 	fmt.Println(myh.Name)
 	//myh.getUsersFromGroup(connection, *client)
 	tcGroups := getTCGroups(connection, *client)
-	for _, tcGroup := range tcGroups {
-		fish.addUserToGroup(tcGroup, connection, *client)
+	for _, tcGroup := range tcGroups.GroupList {
+		userGroups := fish.getUserGroups(connection, *client)
+		if !userInGroup(tcGroup, userGroups) {
+			fish.addUserToGroup(tcGroup, userGroups, connection, *client)
+		}
 	}
-
+	fishGroup := fish.getUserGroups(connection, *client)
+	myh1 := fishGroup.GroupList
+	for _, name := range myh1 {
+		fmt.Println(name.Name)
+	}
 	// for _, ldapGroup := range groupCNs {
 	// 	if !exist(ldapGroup, tcGroups) {
 	// 		createGroup(ldapGroup, connection, *client)
