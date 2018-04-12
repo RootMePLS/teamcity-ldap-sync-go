@@ -108,7 +108,7 @@ func getLDAPUserAttributes(userDN, baseDN string, link *ldap.Conn) User {
 	return user
 }
 
-func getGroupDN(groupName, baseDN string, link *ldap.Conn) ([]string, []string) {
+func getGroupDN(groupName, baseDN string, link *ldap.Conn) map[string]string {
 
 	filter := fmt.Sprintf("(&(objectClass=group)(cn=%s))", groupName)
 	searchRequest := ldap.NewSearchRequest(
@@ -128,15 +128,13 @@ func getGroupDN(groupName, baseDN string, link *ldap.Conn) ([]string, []string) 
 		log.Fatal(err)
 	}
 
-	var dnList []string
-	var cnList []string
+	ldapGroups := make(map[string]string)
 
 	for _, group := range sr.Entries {
-		dnList = append(dnList, group.DN)
-		cnList = append(cnList, group.GetAttributeValues("cn")[0])
+		ldapGroups[group.GetAttributeValues("cn")[0]] = group.DN
 	}
 
-	return dnList, cnList
+	return ldapGroups
 }
 
 func getTCGroups(conn Connection, client http.Client) Groups {
@@ -437,17 +435,17 @@ func main() {
 
 	// использовать функцию только если есть флаг WILDCARD
 
-	// TODO: Возвращать map из getGroupDN make(map[string]string == groupDN:groupCN)
-	_, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	// TODO: Возвращать map из getGroupDN make(map[string]string == groupDN:grou)
+	// _, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
 
-	// ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
-	// tcUsers := getTCUsers(connection, *client)
+	// // ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
+	// // tcUsers := getTCUsers(connection, *client)
 
-	// userList := getTCUsers(connection, *client)
+	// // userList := getTCUsers(connection, *client)
 
-	fish := getTCUsers(connection, *client).UsersList[0]
-	// fish.createUser(connection, *client, wg)
-	fmt.Println(fish)
+	// fish := getTCUsers(connection, *client).UsersList[0]
+	// // fish.createUser(connection, *client, wg)
+	// fmt.Println(fish)
 	// wg := &sync.WaitGroup{}
 
 	// for _, ldapUser := range ldapUsers {
@@ -458,54 +456,60 @@ func main() {
 	// }
 	// wg.Wait()
 
-	fGroup := fish.getUserGroups(connection, *client)
-	myh := fGroup.GroupList[0]
-	fmt.Println(myh.Name)
-	//myh.getUsersFromGroup(connection, *client)
-	tcGroups := getTCGroups(connection, *client)
-	for _, tcGroup := range tcGroups.GroupList {
-		userGroups := fish.getUserGroups(connection, *client)
-		if !userInGroup(tcGroup, userGroups) {
-			fish.addUserToGroup(tcGroup, userGroups, connection, *client)
-		}
-	}
-	fishGroup := fish.getUserGroups(connection, *client)
-	myh1 := fishGroup.GroupList
-	for _, name := range myh1 {
-		fmt.Println(name.Name)
-	}
+	// fGroup := fish.getUserGroups(connection, *client)
+	// myh := fGroup.GroupList[0]
+	// fmt.Println(myh.Name)
+	// //myh.getUsersFromGroup(connection, *client)
+	// tcGroups := getTCGroups(connection, *client)
+	// for _, tcGroup := range tcGroups.GroupList {
+	// 	userGroups := fish.getUserGroups(connection, *client)
+	// 	if !userInGroup(tcGroup, userGroups) {
+	// 		fish.addUserToGroup(tcGroup, userGroups, connection, *client)
+	// 	}
+	// }
+	// fishGroup := fish.getUserGroups(connection, *client)
+	// myh1 := fishGroup.GroupList
+	// for _, name := range myh1 {
+	// 	fmt.Println(name.Name)
+	// }
 	// for _, ldapGroup := range groupCNs {
 	// 	if !exist(ldapGroup, tcGroups) {
 	// createGroup(ldapGroup, connection, *client)
 	// 	}
 	// }
-	fmt.Println("Done")
 
-	// 	"""
-	//         groupDNs, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
-	//         for ldap_group in ldap_groups:
-	//             if self.ldap_object.group_exist(ldap_group): ### проверяем, что группа существует в АД
-	//                 print("Syncing group: {}\n{}".format(ldap_group, "=" * 20))
-	//                  # Get users from LDAP group
-	//                 ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
+	ldapGroups := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
 
-	//             //  tcGroups := getTCGroups(connection, *client)
-	//             //  if !exist(ldapGroup, tcGroups) {
-	//             // 		createGroup(ldapGroup, connection, *client)
-	//             // 	}
+	for groupName, groupDN := range ldapGroups {
 
-	//             // tcUsers := getTCUsers(connection, *client)
-	//             // for _, ldapUser := range ldapUsers {
-	//                 // if !userInTC(ldapUser, tcUsers) {
-	//                 //      wg.Add(1)
-	//                 // 		go ldapUser.createUser(connection, *client, wg)
-	//                 // 	}
-	//             // }
-	//             // tcGroupUsers := tcGroup.getUsersFromGroup(connection, *client)
-	//             // # Add users to TC group
-	//                 for user in ldapUsers.keys():
-	//                     if user not in tcGroupUsers:
-	//                         user.addUserToGroup(ldap_group)
+		fmt.Println(groupName, groupDN)
+		// // if self.ldap_object.group_exist( groupDN): ### проверяем, что группа существует в АД
+		str := fmt.Sprintf("Syncing group: %s\n%s", groupName, "====================")
+		fmt.Println(str)
+		// 	// # Get users from LDAP group
+		ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
 
-	// """
+		tcGroups := getTCGroups(connection, *client)
+		fmt.Println(tcGroups)
+		fmt.Println(ldapUsers)
+		// if !exist(ldapGroup, tcGroups) {
+		// 	createGroup(ldapGroup, connection, *client)
+		// }
+
+		// tcUsers := getTCUsers(connection, *client)
+		// for _, ldapUser := range ldapUsers {
+		// 	if !userInTC(ldapUser, tcUsers) {
+		// 			wg.Add(1)
+		// 			go ldapUser.createUser(connection, *client, wg)
+		// 		}
+		// }
+		// tcGroupUsers := tcGroup.getUsersFromGroup(connection, *client)
+		// // # Add users to TC group
+		// 	for user in ldapUsers.keys():
+		// 		if user not in tcGroupUsers:
+		// 			user.addUserToGroup( groupDN)
+
+		// 			fmt.Println("Done")
+
+	}
 }
