@@ -416,8 +416,17 @@ func userExist(ldapUser User, tcUsers Users) bool {
 	return false
 }
 
-func userInGroup(currentUser User, userGroups Users) bool {
+func userInTCGroup(currentUser User, userGroups Users) bool {
 	for _, user := range userGroups.UsersList {
+		if currentUser.Name == user.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func userInLDAPGroup(currentUser User, userGroups []User) bool {
+	for _, user := range userGroups {
 		if currentUser.Name == user.Name {
 			return true
 		}
@@ -536,7 +545,7 @@ func main() {
 		for _, ldapUser := range ldapUsers {
 			userGroups := ldapUser.getUserGroups(connection, *client)
 
-			if !userInGroup(ldapUser, tcGroupUsers) {
+			if !userInTCGroup(ldapUser, tcGroupUsers) {
 				ldapUser.addUserToGroup(currеntGroup, userGroups, connection, *client)
 			}
 		}
@@ -545,7 +554,7 @@ func main() {
 		for _, tcUser := range tcGroupUsers.UsersList {
 			userGroups := tcUser.getUserGroups(connection, *client)
 
-			if userInGroup(tcUser, tcGroupUsers) {
+			if !userInLDAPGroup(tcUser, ldapUsers) {
 				tcUser.removeUserFromGroup(currеntGroup, userGroups, connection, *client)
 			}
 		}
