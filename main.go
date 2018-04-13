@@ -9,8 +9,10 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/ldap.v2"
 )
@@ -214,25 +216,33 @@ func (group Group) getUsersFromGroup(conn Connection, client http.Client) Users 
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Println(err)
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+
+	if FancyHandleError(err) {
+		log.Print(err)
 	}
 
 	var users Group
 	err = json.Unmarshal(body, &users)
-	if err != nil {
-		log.Println(err)
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+
+	if FancyHandleError(err) {
+		log.Print(err)
 	}
 
 	return *users.Users
 }
 
-func createGroup(groupName string, groups *Groups, conn Connection, client http.Client) {
+func createGroup(groupName string, conn Connection, client http.Client) {
 	fmt.Println("Creating group", groupName)
 	url := conn.url + "/app/rest/userGroups"
 
@@ -262,8 +272,6 @@ func createGroup(groupName string, groups *Groups, conn Connection, client http.
 			log.Println(err)
 		}
 		fmt.Println("response Body:", string(body))
-	} else {
-		groups.GroupList = append(groups.GroupList, group)
 	}
 	defer resp.Body.Close()
 }
@@ -380,9 +388,9 @@ func userExist(ldapUser User, tcUsers Users) bool {
 	return false
 }
 
-func userInGroup(tcGroup string, userGroups Groups) bool {
-	for _, group := range userGroups.GroupList {
-		if tcGroup == group.Name {
+func userInGroup(currentUser User, userGroups Users) bool {
+	for _, user := range userGroups.UsersList {
+		if currentUser.Name == user.Name {
 			return true
 		}
 	}
@@ -398,22 +406,48 @@ func groupExist(ldapGroup string, tcGroups Groups) bool {
 	return false
 }
 
-func exist(group string, tcGroups []string) bool {
-	for _, tcGroup := range tcGroups {
-		if tcGroup == group {
-			return true
+func findTCgroup(groupName string, tcGroups Groups) Group {
+	var dah Group
+	for _, group := range tcGroups.GroupList {
+		if group.Name == groupName {
+			return group
 		}
 	}
-	return false
+	return dah
 }
 
 func generateGroupKey(n int) string {
+	rand.Seed(time.Now().UTC().UnixNano())
 	letterBytes := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+		b[i] = letterBytes[rand.Intn(16)]
 	}
 	return string(b)
+}
+
+func HandleError(err error) (b bool) {
+	if err != nil {
+		// notice that we're using 1, so it will actually log where
+		// the error happened, 0 = this function, we don't want that.
+		_, fn, line, _ := runtime.Caller(1)
+		log.Printf("[error] %s:%d %v", fn, line, err)
+		b = true
+	}
+	return
+}
+
+//this logs the function name as well.
+func FancyHandleError(err error) (b bool) {
+	if err != nil {
+		// notice that we're using 1, so it will actually log the where
+		// the error happened, 0 = this function, we don't want that.
+		pc, fn, line, _ := runtime.Caller(1)
+
+		log.Printf("[error] in %s[%s:%d] %v", runtime.FuncForPC(pc).Name(), fn, line, err)
+		b = true
+	}
+	return
 }
 
 func main() {
@@ -486,22 +520,21 @@ func main() {
 	// 	}
 	// }
 
-	ldapGroups := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+	ldapGroups := getGroupDN("*Teamcity*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
+
+	defer fmt.Println("\nDone")
 
 	for groupName, groupDN := range ldapGroups {
 
 		// // if self.ldap_object.group_exist( groupDN): ### проверяем, что группа существует в АД
-		str := fmt.Sprintf("Syncing group: %s\n%s", groupName, "====================")
-		fmt.Println(str)
-		// 	// # Get users from LDAP group
+		fmt.Printf("Syncing group: %s\n", groupName)
 
 		// Create group if not exist
 		tcGroups := getTCGroups(connection, *client)
-		fmt.Println(len(tcGroups.GroupList))
 		if !groupExist(groupName, tcGroups) {
-			createGroup(groupName, &tcGroups, connection, *client)
+			createGroup(groupName, connection, *client)
+			tcGroups = getTCGroups(connection, *client)
 		}
-		fmt.Println(len(tcGroups.GroupList))
 
 		// Create user if not exist
 		ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
@@ -515,21 +548,17 @@ func main() {
 		}
 
 		// Get users from TC group
-		// tcGroupUsers := tcGroup.getUsersFromGroup(connection, *client)
+		currеntGroup := findTCgroup(groupName, tcGroups)
+		tcGroupUsers := currеntGroup.getUsersFromGroup(connection, *client)
 
-		// # Add users to TC group
-		// 	for user in ldapUsers.keys():
-		// 		if user not in tcGroupUsers:
-		// 			user.addUserToGroup( groupDN)
-
+		// Add users to TC group
 		for _, ldapUser := range ldapUsers {
 			userGroups := ldapUser.getUserGroups(connection, *client)
-			if !userInGroup(groupName, userGroups) {
-				ldapUser.addUserToGroup(groupName, userGroups, connection, *client)
+
+			if !userInGroup(ldapUser, tcGroupUsers) {
+				ldapUser.addUserToGroup(currеntGroup, userGroups, connection, *client)
 			}
 		}
-
-		fmt.Println("Done")
-
 	}
+
 }
