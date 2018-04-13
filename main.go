@@ -308,8 +308,7 @@ func (user User) getUserGroups(conn Connection, client http.Client) Groups {
 }
 
 func (user User) addUserToGroup(group Group, userGroups Groups, conn Connection, client http.Client) {
-	str := fmt.Sprintf("Adding user %s to group %s", user.Name, group.Name)
-	fmt.Println(str)
+	fmt.Printf("Adding user %s to group %s\n", user.Name, group.Name)
 	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
 	userGroups.GroupList = append(userGroups.GroupList, group)
 	data, err := json.Marshal(userGroups)
@@ -326,6 +325,10 @@ func (user User) addUserToGroup(group Group, userGroups Groups, conn Connection,
 	createReq.SetBasicAuth(conn.login, conn.password)
 
 	resp, err := client.Do(createReq)
+	if err != nil {
+		log.Println(err)
+	}
+
 	defer resp.Body.Close()
 
 	if err != nil || resp.StatusCode != 200 {
@@ -333,22 +336,50 @@ func (user User) addUserToGroup(group Group, userGroups Groups, conn Connection,
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Println("response Body:", string(body))
-		//print("Error: Couldn't add user {} to group {}\n{}".format(user, group_name, resp.content))
+		fmt.Printf("Error: Couldn't add user %s to group %s\nresponse Body:%s\n", user.Name, group.Name, string(body))
 	}
 }
 
-func (user User) removeUserFromGroup(conn Connection, client http.Client) {
-	//print("Removing user {} from group {}".format(user, group_name))
-	//url = self.rest_url + 'users/' + user + '/groups'
-	//   user_groups = TeamCityClient.get_user_groups(self, user)
-	//for group in user_groups['group']:
-	//if group['name'] == group_name:
-	//user_groups['group'].remove(group)
-	//data = json.dumps(user_groups)
-	//resp = self.session.put(url, data=data, verify=False)
-	//if resp.status_code != 200:
-	//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
+func (user User) removeUserFromGroup(group Group, userGroups Groups, conn Connection, client http.Client) {
+
+	fmt.Printf("Removing user %s from group %s\n", user.Name, group.Name)
+
+	url := conn.url + "/app/rest/users/" + user.Username + "/groups"
+
+	for idx, gr := range userGroups.GroupList {
+		if gr.Name == group.Name {
+			userGroups.GroupList = append(userGroups.GroupList[:idx], userGroups.GroupList[idx+1:]...)
+		}
+	}
+
+	data, err := json.Marshal(userGroups)
+	if err != nil {
+		panic(err)
+	}
+
+	createReq, err := http.NewRequest("PUT", url, bytes.NewBuffer(data))
+	if err != nil {
+		log.Println(err)
+	}
+	createReq.Header.Add("Content-type", "application/json")
+	createReq.Header.Add("Accept", "application/json")
+	createReq.SetBasicAuth(conn.login, conn.password)
+
+	resp, err := client.Do(createReq)
+	if err != nil && resp.StatusCode != 200 {
+		log.Println(err)
+		//print("Error: Couldn't remove user {} from group {}\n{}".format(user, group_name, resp.content))
+	}
+
+	defer resp.Body.Close()
+
+	if err != nil || resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Println(err)
+		}
+		fmt.Printf("Error: Couldn't add user %s to group %s\nresponse Body:%s\n", user.Name, group.Name, string(body))
+	}
 }
 
 func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGroup) {
@@ -370,9 +401,6 @@ func (user User) createUser(conn Connection, client http.Client, wg *sync.WaitGr
 
 	resp, err := client.Do(searcherReq)
 	if err != nil {
-		// panic(err)
-		fmt.Println("response Status:", resp.Status)
-		fmt.Println("response Headers:", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
 		fmt.Println("response Body:", string(body))
 	}
@@ -475,54 +503,7 @@ func main() {
 	client := &http.Client{}
 	connection := Connection{*tcServer, *tcUser, *tcPassword}
 
-	// использовать функцию только если есть флаг WILDCARD
-
-	// TODO: Возвращать map из getGroupDN make(map[string]string == groupDN:grou)
-	// _, groupCNs := getGroupDN("*Zabbix*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
-
-	// // ldapUsers := getLDAPUsers(groupDN, "dc=ptsecurity,dc=ru", l) // base брать из лдап конекшн
-	// // tcUsers := getTCUsers(connection, *client)
-
-	// // userList := getTCUsers(connection, *client)
-
-	// fish := getTCUsers(connection, *client).UsersList[0]
-	// // fish.createUser(connection, *client, wg)
-	// fmt.Println(fish)
-	// wg := &sync.WaitGroup{}
-
-	// for _, ldapUser := range ldapUsers {
-	// 	if !userExist(ldapUser, tcUsers) {
-	// 		wg.Add(1)
-	// 		go ldapUser.createUser(connection, *client, wg)
-	// 	}
-	// }
-	// wg.Wait()
-
-	// fGroup := fish.getUserGroups(connection, *client)
-	// myh := fGroup.GroupList[0]
-	// fmt.Println(myh.Name)
-	// //myh.getUsersFromGroup(connection, *client)
-	// tcGroups := getTCGroups(connection, *client)
-	// for _, tcGroup := range tcGroups.GroupList {
-	// 	userGroups := fish.getUserGroups(connection, *client)
-	// 	if !userInGroup(tcGroup, userGroups) {
-	// 		fish.addUserToGroup(tcGroup, userGroups, connection, *client)
-	// 	}
-	// }
-	// fishGroup := fish.getUserGroups(connection, *client)
-	// myh1 := fishGroup.GroupList
-	// for _, name := range myh1 {
-	// 	fmt.Println(name.Name)
-	// }
-	// for _, ldapGroup := range groupCNs {
-	// 	if !exist(ldapGroup, tcGroups) {
-	// createGroup(ldapGroup, connection, *client)
-	// 	}
-	// }
-
 	ldapGroups := getGroupDN("*Teamcity*", "dc=ptsecurity,dc=ru", l) // добавить выбор группы, base брать из лдап конекшн
-
-	defer fmt.Println("\nDone")
 
 	for groupName, groupDN := range ldapGroups {
 
@@ -559,6 +540,15 @@ func main() {
 				ldapUser.addUserToGroup(currеntGroup, userGroups, connection, *client)
 			}
 		}
-	}
 
+		// Remove users from TC group
+		for _, tcUser := range tcGroupUsers.UsersList {
+			userGroups := tcUser.getUserGroups(connection, *client)
+
+			if userInGroup(tcUser, tcGroupUsers) {
+				tcUser.removeUserFromGroup(currеntGroup, userGroups, connection, *client)
+			}
+		}
+	}
+	fmt.Println("\nDone")
 }
